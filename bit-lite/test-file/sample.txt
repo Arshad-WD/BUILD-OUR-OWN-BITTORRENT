@@ -1,7 +1,0 @@
-This is a sample file for our BitTorrent-from-scratch project.
-
-We are building a minimal BitTorrent system using Node.js.
-The file will be split into pieces, shared between peers,
-and reassembled on the receiving side.
-
-If this works, you have basically implemented the core of BitTorrent.

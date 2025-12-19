@@ -2,16 +2,12 @@ const fs = require("fs");
 const { PIECE_SIZE } = require("../shared/constants");
 
 class Storage {
-  constructor(filePath, isSeeder) {
+  constructor(filePath) {
     this.filePath = filePath;
-    this.isSeeder = isSeeder;
+  }
 
-    if (!isSeeder) {
-      // create empty file for leecher
-      fs.writeFileSync(this.filePath, "");
-    }
-
-    this.fileSize = fs.statSync(this.filePath).size;
+  initEmptyFile(totalPieces) {
+    fs.writeFileSync(this.filePath, Buffer.alloc(totalPieces * PIECE_SIZE));
   }
 
   readPiece(index) {
@@ -29,18 +25,16 @@ class Storage {
 
     fs.closeSync(fd);
     return buffer.slice(0, bytesRead);
-  }
+}
+
 
   writePiece(index, data) {
     const fd = fs.openSync(this.filePath, "r+");
-    const offset = index * PIECE_SIZE;
-
-    fs.writeSync(fd, data, 0, data.length, offset);
+    fs.writeSync(fd, data, 0, data.length, index * PIECE_SIZE);
     fs.closeSync(fd);
   }
-
-  getTotalPieces() {
-    return Math.ceil(this.fileSize / PIECE_SIZE);
+  truncateToSize(size){
+    fs.truncateSync(this.filePath, size);
   }
 }
 

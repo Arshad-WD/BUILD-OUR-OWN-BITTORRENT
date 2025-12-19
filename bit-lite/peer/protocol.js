@@ -1,18 +1,16 @@
 const MESSAGE_TYPES = {
-    HANDSHAKE: "handshake",
-    BITFILED: "bitfield",
-    REQUEST: "request",
-    PIECE: "piece",
-}
-
-function encode(message){
-    return JSON.stringify(message);
-}
-
-function decode(data){
-    return JSON.parse(data.toString());
-}
-
-module.exports = {
-    encode, decode, MESSAGE_TYPES
+  HANDSHAKE: "handshake",
+  METADATA: "metadata",
+  REQUEST: "request",
+  PIECE: "piece",
 };
+
+function encode(msg) {
+  return JSON.stringify(msg);
+}
+
+function decode(data) {
+  return JSON.parse(data.toString());
+}
+
+module.exports = { MESSAGE_TYPES, encode, decode };

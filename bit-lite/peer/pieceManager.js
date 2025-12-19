@@ -1,35 +1,27 @@
 class PieceManager {
-    constructor(totalPieces, isSeeder){
-        this.totalPieces = totalPieces;
+  constructor(totalPieces, isSeeder) {
+    this.totalPieces = totalPieces;
+    this.pieces = new Array(totalPieces).fill(isSeeder);
+  }
 
-        //bitfiled : true = have Piece
-        this.pieces = new Array(totalPieces).fill(isSeeder);
+  hasPiece(i){
+    return this.pieces[i];
+  }
+  
+  getMissingPiece() {
+    for (let i = 0; i < this.totalPieces; i++) {
+      if (!this.pieces[i]) return i;
     }
+    return null;
+  }
 
-    hasPiece(index){
-        return this.pieces[index];
-    }
+  addPiece(index) {
+    this.pieces[index] = true;
+  }
 
-    addPiece(index){
-        this.pieces[index] = true;
-    }
-
-    getMissingPiece(){
-        for(let i = 0; i< this.totalPieces; i++){
-            if(!this.pieces[i]){
-                return i;
-            }
-        }
-        return null;
-    }
-
-    getBitField(){
-        return this.pieces;
-    }
-
-    isComplete(){
-        return this.pieces.every(Boolean);
-    }
+  isComplete() {
+    return this.pieces.every(Boolean);
+  }
 }
 
 module.exports = PieceManager;
