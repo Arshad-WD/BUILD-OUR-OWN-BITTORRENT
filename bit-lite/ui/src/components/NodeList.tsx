@@ -60,13 +60,24 @@ export default function NodeList({
                   <span className="node-id">{truncateId(node.peerId)}</span>
                   <span className="node-port">:{node.port}</span>
                 </div>
-                <button
-                  className="btn-stop"
-                  onClick={() => handleStop(node.peerId)}
-                  title="Stop node"
-                >
-                  ⏹
-                </button>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {s && s.isComplete && !node.isSeeder && s.fileId && (
+                    <a
+                      className="btn-save"
+                      href={`http://localhost:4000/api/download-file/${s.fileId}`}
+                      title="Save to device"
+                    >
+                      💾
+                    </a>
+                  )}
+                  <button
+                    className="btn-stop"
+                    onClick={() => handleStop(node.peerId)}
+                    title="Stop node"
+                  >
+                    ⏹
+                  </button>
+                </div>
               </div>
 
               {s && (

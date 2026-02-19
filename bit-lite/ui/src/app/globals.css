@@ -688,6 +688,29 @@ body::before {
   box-shadow: 0 0 16px rgba(251, 113, 133, 0.15);
 }
 
+.btn-save {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--accent-emerald);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-save:hover {
+  background: rgba(52, 211, 153, 0.2);
+  border-color: var(--accent-emerald);
+  transform: scale(1.1);
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.2);
+}
+
 /* ── Download Form ─────────────────────────── */
 .download-form {
   display: flex;

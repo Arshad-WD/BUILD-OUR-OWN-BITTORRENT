@@ -336,6 +336,29 @@ api.get("/api/torrents", (req, res) => {
   res.json(result);
 });
 
+// ── Download File to Device ───────────────────
+api.get("/api/download-file/:infoHash", (req, res) => {
+  const info = torrents.get(req.params.infoHash);
+  if (!info) return res.status(404).json({ error: "Torrent not found" });
+
+  const fileName = info.name || info.metadata.info.name;
+
+  // Check downloads folder first (leecher output), then uploads (seeder source)
+  const downloadPath = path.join(DOWNLOADS_DIR, fileName);
+  const uploadPath = path.join(UPLOADS_DIR, fileName);
+  const filePath = fs.existsSync(downloadPath)
+    ? downloadPath
+    : fs.existsSync(uploadPath)
+      ? uploadPath
+      : info.filePath;
+
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not ready yet — download still in progress" });
+  }
+
+  res.download(filePath, fileName);
+});
+
 // ── Global Stats ──────────────────────────────
 api.get("/api/global-stats", (req, res) => {
   let totalDown = 0;
