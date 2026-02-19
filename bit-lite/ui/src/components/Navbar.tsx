@@ -9,20 +9,22 @@ export default function Navbar({ isOnline, trackerOnline }: NavbarProps) {
   return (
     <nav className="navbar animate-in">
       <div className="navbar-brand">
-        <div className="navbar-logo">⚡</div>
+        <div className="navbar-logo">
+          <span className="logo-icon">⚡</span>
+        </div>
         <div>
           <div className="navbar-title">BitLite</div>
-          <div className="navbar-subtitle">BitTorrent Dashboard</div>
+          <div className="navbar-subtitle">Peer-to-Peer File Sharing</div>
         </div>
       </div>
-      <div style={{ display: "flex", gap: "20px" }}>
+      <div className="navbar-right">
         <div className="navbar-status">
           <span className={`status-dot ${isOnline ? "" : "offline"}`} />
-          Peer: {isOnline ? "Online" : "Offline"}
+          <span className="status-label">API</span>
         </div>
         <div className="navbar-status">
           <span className={`status-dot ${trackerOnline ? "" : "offline"}`} />
-          Tracker: {trackerOnline ? "Online" : "Offline"}
+          <span className="status-label">Tracker</span>
         </div>
       </div>
     </nav>

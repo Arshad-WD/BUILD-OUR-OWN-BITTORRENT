@@ -1,189 +1,113 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import Navbar from "@/components/Navbar";
-import StatsCard from "@/components/StatsCard";
-import PieceGrid from "@/components/PieceGrid";
-import PeerTable from "@/components/PeerTable";
+import { useState, useEffect, useCallback } from "react";
+import Navbar from "../components/Navbar";
+import UploadCard from "../components/UploadCard";
+import DownloadCard from "../components/DownloadCard";
+import NodeList from "../components/NodeList";
+import TorrentList from "../components/TorrentList";
+import StatsCard from "../components/StatsCard";
 import {
-  fetchStats,
-  fetchPeers,
+  fetchNodes,
+  fetchTorrents,
+  fetchGlobalStats,
   fetchTrackerStatus,
-  fetchMetadata,
   formatBytes,
-  formatUptime,
-  type PeerStats,
-  type ConnectedPeer,
-  type TrackerStatus,
+  type NodeInfo,
   type TorrentInfo,
-} from "@/lib/api";
+  type GlobalStats,
+} from "../lib/api";
 
-const POLL_INTERVAL = 2000;
-
-export default function DashboardPage() {
-  const [stats, setStats] = useState<PeerStats | null>(null);
-  const [peers, setPeers] = useState<ConnectedPeer[]>([]);
-  const [tracker, setTracker] = useState<TrackerStatus | null>(null);
-  const [metadata, setMetadata] = useState<TorrentInfo | null>(null);
+export default function Dashboard() {
+  const [nodes, setNodes] = useState<NodeInfo[]>([]);
+  const [torrents, setTorrents] = useState<TorrentInfo[]>([]);
+  const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
+  const [trackerOnline, setTrackerOnline] = useState(false);
+  const [apiOnline, setApiOnline] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [s, p, t, m] = await Promise.all([
-      fetchStats(),
-      fetchPeers(),
+    const [n, t, g, tr] = await Promise.all([
+      fetchNodes(),
+      fetchTorrents(),
+      fetchGlobalStats(),
       fetchTrackerStatus(),
-      fetchMetadata(),
     ]);
-    setStats(s);
-    setPeers(p);
-    setTracker(t);
-    setMetadata(m);
+
+    setNodes(n);
+    setTorrents(t);
+    setGlobalStats(g);
+    setApiOnline(g !== null);
+    setTrackerOnline(tr !== null);
   }, []);
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, POLL_INTERVAL);
+    const id = setInterval(refresh, 2000);
     return () => clearInterval(id);
   }, [refresh]);
 
-  const isOnline = stats !== null;
-  const trackerOnline = tracker?.tracker === "online";
-  const progress = stats ? parseFloat(stats.progress) : 0;
+  // Aggregate stats
+  const activeNodes = nodes.filter(n => n.status === "running");
+  const seeders = activeNodes.filter(n => n.isSeeder || n.stats?.isComplete);
+  const leechers = activeNodes.filter(
+    n => !n.isSeeder && !n.stats?.isComplete
+  );
+  const totalDown = globalStats?.totalDownloaded ?? 0;
+  const totalUp = globalStats?.totalUploaded ?? 0;
 
   return (
     <div className="page-wrapper">
-      <Navbar isOnline={isOnline} trackerOnline={trackerOnline} />
+      <Navbar isOnline={apiOnline} trackerOnline={trackerOnline} />
 
-      {/* ── Progress Bar ───────────────────── */}
-      <div className="glass-card full-width-section animate-in animate-delay-1" style={{ padding: 24, marginBottom: 24 }}>
-        <div className="progress-container" style={{ marginBottom: 0 }}>
-          <div className="progress-header">
-            <span className="progress-title">
-              {stats?.isSeeder ? "🌱 Seeding" : stats?.isComplete ? "✅ Download Complete" : "⬇️ Downloading"}
-            </span>
-            <span className="progress-percent">{stats ? stats.progress : "0.0"}%</span>
-          </div>
-          <div className="progress-bar-track">
-            <div
-              className="progress-bar-fill"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
-            <span>
-              {stats ? `${stats.completedPieces} / ${stats.totalPieces} pieces` : "—"}
-            </span>
-            <span>
-              Mode: {stats?.mode ?? "—"} {stats?.endGame ? " • END GAME" : ""}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Stats Grid ─────────────────────── */}
+      {/* ─── Hero Stats ─────────────────────────── */}
       <div className="stats-grid">
         <StatsCard
-          icon="👤"
-          label="Peer ID"
-          value={stats?.peerId?.slice(0, 8) ?? "—"}
-          sub={stats ? `Port ${stats.port}` : undefined}
-          color="indigo"
+          icon="🖥️"
+          label="Active Nodes"
+          value={String(activeNodes.length)}
+          sub={`${seeders.length} seeders, ${leechers.length} leechers`}
+          color="cyan"
           delay={1}
         />
         <StatsCard
-          icon="🔗"
-          label="Connected Peers"
-          value={stats?.connectedPeers ?? 0}
-          sub={`${stats?.unchokedPeers ?? 0} unchoked`}
-          color="cyan"
+          icon="📦"
+          label="Torrents"
+          value={String(torrents.length)}
+          sub="Tracked files"
+          color="violet"
           delay={2}
         />
         <StatsCard
           icon="⬇️"
           label="Downloaded"
-          value={formatBytes(stats?.downloaded ?? 0)}
+          value={formatBytes(totalDown)}
           color="emerald"
           delay={3}
         />
         <StatsCard
           icon="⬆️"
           label="Uploaded"
-          value={formatBytes(stats?.uploaded ?? 0)}
+          value={formatBytes(totalUp)}
           color="amber"
           delay={4}
         />
-        <StatsCard
-          icon="📁"
-          label="Active Torrents"
-          value={tracker?.activeTorrents ?? 0}
-          sub={trackerOnline ? `Uptime: ${formatUptime(tracker?.uptime ?? 0)}` : "Tracker offline"}
-          color="violet"
-          delay={5}
-        />
-        <StatsCard
-          icon={stats?.isSeeder ? "🌱" : "📥"}
-          label="Role"
-          value={stats?.isSeeder ? "Seeder" : "Leecher"}
-          sub={stats?.isComplete ? "Complete" : "In progress"}
-          color="rose"
-          delay={6}
-        />
       </div>
 
-      {/* ── Content Grid ───────────────────── */}
+      {/* ─── Upload & Download ──────────────────── */}
       <div className="content-grid">
-        {/* Piece Grid */}
-        <div className="glass-card section-card animate-in animate-delay-3">
-          <div className="section-header">
-            <span className="section-title">🧩 Piece Map</span>
-            <span className="section-badge">
-              {stats ? `${stats.completedPieces}/${stats.totalPieces}` : "—"}
-            </span>
-          </div>
-          <PieceGrid
-            bitfield={stats?.bitfield ?? []}
-            totalPieces={stats?.totalPieces ?? 0}
-          />
-        </div>
-
-        {/* Peers Table */}
-        <div className="glass-card section-card animate-in animate-delay-4">
-          <div className="section-header">
-            <span className="section-title">👥 Connected Peers</span>
-            <span className="section-badge">{peers.length}</span>
-          </div>
-          <PeerTable peers={peers} />
-        </div>
+        <UploadCard onSeedStarted={() => refresh()} />
+        <DownloadCard onDownloadStarted={() => refresh()} />
       </div>
 
-      {/* ── Torrent Info ───────────────────── */}
-      {metadata && metadata.info && (
-        <div className="glass-card section-card full-width-section animate-in animate-delay-5">
-          <div className="section-header">
-            <span className="section-title">📋 Torrent Info</span>
-          </div>
-          <div className="info-grid">
-            <div className="info-item">
-              <div className="info-label">File Name</div>
-              <div className="info-value">{metadata.info.name}</div>
-            </div>
-            <div className="info-item">
-              <div className="info-label">File Size</div>
-              <div className="info-value">{formatBytes(metadata.info.length)}</div>
-            </div>
-            <div className="info-item">
-              <div className="info-label">Piece Size</div>
-              <div className="info-value">{formatBytes(metadata.info.pieceLength)}</div>
-            </div>
-            <div className="info-item">
-              <div className="info-label">Info Hash</div>
-              <div className="info-value" style={{ fontSize: 11 }}>{metadata.infoHash}</div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── Active Nodes ───────────────────────── */}
+      <NodeList nodes={nodes} onRefresh={refresh} />
 
+      {/* ─── Torrent List ───────────────────────── */}
+      <TorrentList torrents={torrents} />
+
+      {/* ─── Footer ─────────────────────────────── */}
       <footer className="footer">
-        BitLite — A simplified BitTorrent implementation • Built with Next.js
+        BitLite — Real BitTorrent • Upload. Seed. Share. Download.
       </footer>
     </div>
   );
