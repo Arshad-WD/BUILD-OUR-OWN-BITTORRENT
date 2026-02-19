@@ -1,0 +1,11 @@
+{
+  "infoHash": "8a74397883a0ea12e2c4de27caa85977bc073cbb",
+  "info": {
+    "name": "sample.txt",
+    "length": 261,
+    "pieceLength": 16384,
+    "pieces": [
+      "13cb651769a684d55c31bf60b0b884a1975a56a9"
+    ]
+  }
+}
