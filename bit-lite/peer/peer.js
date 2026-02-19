@@ -122,9 +122,6 @@ class Peer {
   startServer() {
     const server = net.createServer(socket => {
       this.uploadPeers.add(socket);
-      this.unchokedPeers.delete(socket);
-
-      socket.write(encode({ type: MESSAGE_TYPES.CHOKE }));
 
       socket.on("error", () => {});
       socket.on("close", () => this.cleanupSocket(socket));
@@ -138,6 +135,14 @@ class Peer {
               bitfield: this.pieceManager.getBitfield(),
             })
           );
+
+          // Immediately unchoke if upload slots available
+          if (this.unchokedPeers.size < this.MAX_UPLOAD_SLOTS) {
+            socket.write(encode({ type: MESSAGE_TYPES.UNCHOKE }));
+            this.unchokedPeers.add(socket);
+          } else {
+            socket.write(encode({ type: MESSAGE_TYPES.CHOKE }));
+          }
           return;
         }
 
