@@ -1,8 +1,8 @@
-# ⚡ BitLite — Distributed BitTorrent System
+# ⚡ Distributed File Sharing & Task System
 
 A fully functional, distributed peer-to-peer file sharing system built from scratch in Node.js, featuring a custom **Redis Messaging Layer**, **Dockerized Worker Nodes**, **Peer Failure Recovery**, and a premium **Cyberpunk Next.js Dashboard**.
 
-![BitLite Dashboard](https://img.shields.io/badge/UI-Cyberpunk%20Dashboard-00f3ff?style=for-the-badge)
+![Dashboard](https://img.shields.io/badge/UI-Cyberpunk%20Dashboard-00f3ff?style=for-the-badge)
 ![Distributed](https://img.shields.io/badge/Architecture-Distributed%20P2P-ff00ff?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Containerized-Docker-blue?style=for-the-badge)
 
