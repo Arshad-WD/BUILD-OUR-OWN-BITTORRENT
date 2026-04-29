@@ -1,0 +1,70 @@
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  orchestrator:
+    build: .
+    command: node src/orchestrator.js
+    environment:
+      - REDIS_URL=redis://redis:6379
+      # NO_UI=true # Uncomment if you want to run UI locally instead of in Docker
+    ports:
+      - "3000:3000" # Tracker
+      - "3001:3001" # UI
+      - "4000:4000" # API
+      - "6881:6881/udp" # DHT
+    volumes:
+      - shared_uploads:/app/uploads
+      - shared_downloads:/app/downloads
+      - shared_torrents:/app/torrents
+    depends_on:
+      - redis
+
+  worker-1:
+    build: .
+    command: node src/worker-daemon.js
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WORKER_ID=worker-1
+    volumes:
+      - shared_uploads:/app/uploads
+      - shared_downloads:/app/downloads
+      - shared_torrents:/app/torrents
+    depends_on:
+      - redis
+
+  worker-2:
+    build: .
+    command: node src/worker-daemon.js
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WORKER_ID=worker-2
+    volumes:
+      - shared_uploads:/app/uploads
+      - shared_downloads:/app/downloads
+      - shared_torrents:/app/torrents
+    depends_on:
+      - redis
+
+  worker-3:
+    build: .
+    command: node src/worker-daemon.js
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WORKER_ID=worker-3
+    volumes:
+      - shared_uploads:/app/uploads
+      - shared_downloads:/app/downloads
+      - shared_torrents:/app/torrents
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
+  shared_uploads:
+  shared_downloads:
+  shared_torrents:

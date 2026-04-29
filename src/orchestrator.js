@@ -4,6 +4,7 @@ const fs = require("fs");
 const express = require("express");
 const multer = require("multer");
 const { createMetadata } = require("./shared/metadata");
+const RedisQueue = require("./shared/redisQueue");
 
 // ─── CONFIG ───────────────────────────────────
 const TRACKER_PORT = 3000;
@@ -11,22 +12,71 @@ const API_PORT = 4000;
 const UI_PORT = 3001;
 const DHT_PORT = 6881;
 const BASE_PEER_PORT = 5001;
-const UPLOADS_DIR = path.join(__dirname, "uploads");
-const TORRENTS_DIR = path.join(__dirname, "torrents");
-const DOWNLOADS_DIR = path.join(__dirname, "downloads");
+const UPLOADS_DIR = path.join(__dirname, "../uploads");
+const TORRENTS_DIR = path.join(__dirname, "../torrents");
+const DOWNLOADS_DIR = path.join(__dirname, "../downloads");
 
 // Ensure directories
 [UPLOADS_DIR, TORRENTS_DIR, DOWNLOADS_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
-// ─── STATE ────────────────────────────────────
-const nodes = new Map();       // id -> { process, config, stats, status }
+// ─── STATE & REDIS ────────────────────────────
+const nodes = new Map();       // id -> { config, stats, status, workerId }
 const torrents = new Map();    // infoHash -> { metadata, filePath, name }
 let nextPort = BASE_PEER_PORT;
 let trackerProcess = null;
 let dhtProcess = null;
 let uiProcess = null;
+
+const redisQueue = new RedisQueue("orchestrator");
+
+// Subscribe to worker events
+redisQueue.subscribe("worker:events", msg => {
+  if (msg.type === "STARTED") {
+    const node = nodes.get(msg.peerId);
+    if (node) {
+      node.status = "running";
+      node.workerId = msg.workerId;
+      console.log(`[orchestrator] Worker node ${msg.workerId} started ${msg.isSeeder ? "Seeder" : "Leecher"} ${msg.peerId.slice(0, 6)} on port ${msg.port}`);
+    }
+  }
+  
+  if (msg.type === "STATS") {
+    const node = nodes.get(msg.data.peerId);
+    if (node) {
+      node.stats = msg.data;
+    }
+  }
+
+  if (msg.type === "STOPPED" || msg.type === "EXITED") {
+    const node = nodes.get(msg.peerId);
+    if (node) {
+      node.status = "stopped";
+      console.log(`[orchestrator] Peer ${msg.peerId.slice(0, 6)} exited on worker ${msg.workerId}`);
+    }
+  }
+});
+
+// Peer Failure Monitor
+setInterval(async () => {
+  try {
+    const { dead } = await redisQueue.getWorkersHealth(15000);
+    for (const deadWorkerId of dead) {
+      console.log(`[orchestrator] ⚠ DETECTED DEAD WORKER: ${deadWorkerId}. Initiating failover...`);
+      const failedTasks = await redisQueue.getAndClearDeadWorkerTasks(deadWorkerId);
+      
+      for (const task of failedTasks) {
+        console.log(`[orchestrator] Re-queuing task ${task.peerId} to another worker...`);
+        // Re-queue the task to Redis
+        nodes.get(task.peerId).status = "starting";
+        await redisQueue.pushTask(task);
+      }
+    }
+  } catch (err) {
+    console.error("[orchestrator] Error monitoring health", err);
+  }
+}, 5000);
 
 // ─── PROCESS MANAGEMENT ──────────────────────
 function spawnTracker() {
@@ -60,7 +110,7 @@ function spawnDHT() {
 
 function spawnUI() {
   uiProcess = require("child_process").spawn("npx", ["next", "dev", "-p", String(UI_PORT)], {
-    cwd: path.join(__dirname, "ui"),
+    cwd: path.join(__dirname, "../ui"),
     stdio: ["pipe", "pipe", "pipe"],
     shell: true,
   });
@@ -84,45 +134,22 @@ function spawnUI() {
 
 function spawnWorker(config) {
   const id = config.peerId;
-  const worker = fork(path.join(__dirname, "worker.js"), [], {
-    stdio: ["pipe", "pipe", "pipe", "ipc"],
-  });
-
-  worker.stdout.on("data", d =>
-    process.stdout.write(`[${id.slice(0, 6)}] ${d}`)
-  );
-  worker.stderr.on("data", d =>
-    process.stderr.write(`[${id.slice(0, 6)}] ${d}`)
-  );
-
+  
   const nodeInfo = {
-    process: worker,
     config,
     stats: null,
     status: "starting",
+    workerId: null
   };
 
   nodes.set(id, nodeInfo);
 
-  worker.on("message", msg => {
-    if (msg.type === "STARTED") {
-      nodeInfo.status = "running";
-      console.log(
-        `[orchestrator] ${msg.isSeeder ? "Seeder" : "Leecher"} ${msg.peerId.slice(0, 6)} running on port ${msg.port}`
-      );
-    }
-    if (msg.type === "STATS") {
-      nodeInfo.stats = msg.data;
-    }
+  // Send start config to Redis Queue instead of local child_process
+  redisQueue.pushTask(config).catch(err => {
+    console.error("[orchestrator] Failed to push task to Redis:", err);
   });
 
-  worker.on("exit", code => {
-    nodeInfo.status = "stopped";
-    console.log(`[orchestrator] Worker ${id.slice(0, 6)} exited (code ${code})`);
-  });
-
-  // Send start config
-  worker.send({ type: "START", config });
+  console.log(`[orchestrator] Queued task for peer ${id.slice(0, 6)}`);
 
   return id;
 }
@@ -292,18 +319,22 @@ api.get("/api/stats/:id", (req, res) => {
 });
 
 // ── Stop Node ─────────────────────────────────
-api.delete("/api/stop-node/:id", (req, res) => {
+api.delete("/api/stop-node/:id", async (req, res) => {
   const node = nodes.get(req.params.id);
   if (!node) return res.status(404).json({ error: "Node not found" });
 
   try {
-    node.process.send({ type: "STOP" });
+    // Publish a stop command via Redis so the worker daemon can kill it
+    await redisQueue.publish("worker:commands", {
+      type: "STOP_PEER",
+      peerId: req.params.id,
+      workerId: node.workerId
+    });
     node.status = "stopping";
     res.json({ success: true });
-  } catch {
-    node.process.kill();
-    node.status = "stopped";
-    res.json({ success: true, note: "Force killed" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to stop node" });
   }
 });
 
@@ -390,21 +421,27 @@ async function main() {
   console.log("  ⚡ BitLite — Real BitTorrent Client");
   console.log("═══════════════════════════════════════\n");
 
-  // 1. Start tracker
-  spawnTracker();
-  await sleep(1000);
+  // 1. Start tracker (if not disabled)
+  if (process.env.NO_TRACKER !== "true") {
+    spawnTracker();
+    await sleep(1000);
+  }
 
-  // 2. Start DHT
-  spawnDHT();
-  await sleep(500);
+  // 2. Start DHT (if not disabled)
+  if (process.env.NO_DHT !== "true") {
+    spawnDHT();
+    await sleep(500);
+  }
 
   // 3. Start API
   api.listen(API_PORT, () => {
     console.log(`[orchestrator] API server on http://localhost:${API_PORT}`);
   });
 
-  // 4. Start UI
-  spawnUI();
+  // 4. Start UI (if not disabled)
+  if (process.env.NO_UI !== "true") {
+    spawnUI();
+  }
 
   // 5. Load existing torrents
   if (fs.existsSync(TORRENTS_DIR)) {
@@ -439,12 +476,11 @@ function sleep(ms) {
 // Graceful shutdown
 process.on("SIGINT", () => {
   console.log("\n[orchestrator] Shutting down...");
-  for (const [id, node] of nodes.entries()) {
-    try { node.process.kill(); } catch {}
-  }
+  // Stop all local processes
   try { trackerProcess?.kill(); } catch {}
   try { dhtProcess?.kill(); } catch {}
   try { uiProcess?.kill(); } catch {}
+  try { redisQueue.disconnect(); } catch {}
   process.exit(0);
 });
 
